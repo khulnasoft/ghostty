@@ -5,7 +5,7 @@ name: Release PR
 
 jobs:
   sentry-dsym-debug:
-    runs-on: namespace-profile-ghostty-sm
+    runs-on: ghcr.io/khulnasoft/ubuntu-runner-amd64:22.04-sm
     needs: [build-macos-debug]
     steps:
       - uses: actions/checkout@v4
@@ -26,7 +26,7 @@ jobs:
           sentry-cli dif upload --project ghostty --wait dsym.zip
 
   sentry-dsym:
-    runs-on: namespace-profile-ghostty-sm
+    runs-on: ghcr.io/khulnasoft/ubuntu-runner-amd64:22.04-sm
     needs: [build-macos]
     steps:
       - uses: actions/checkout@v4
@@ -47,7 +47,7 @@ jobs:
           sentry-cli dif upload --project ghostty --wait dsym.zip
 
   build-macos:
-    runs-on: namespace-profile-ghostty-macos
+    runs-on: ghcr.io/khulnasoft/macos-runner:sonoma
     timeout-minutes: 90
     steps:
       - name: Checkout code
@@ -68,7 +68,7 @@ jobs:
       # Setup Sparkle
       - name: Setup Sparkle
         env:
-          SPARKLE_VERSION: 2.6.4
+          SPARKLE_VERSION: 2.6.3
         run: |
           mkdir -p .action/sparkle
           cd .action/sparkle
@@ -94,7 +94,7 @@ jobs:
       - name: Build Ghostty.app
         run: |
           cd macos
-          sudo xcode-select -s /Applications/Xcode_16.0.app
+          sudo xcode-select -s /Applications/Xcode_16.app
           xcodebuild -target Ghostty -configuration Release
 
       # We inject the "build number" as simply the number of commits since HEAD.
@@ -199,7 +199,7 @@ jobs:
           destination-dir: ./
 
   build-macos-debug:
-    runs-on: namespace-profile-ghostty-macos
+    runs-on: ghcr.io/khulnasoft/macos-runner:sonoma
     timeout-minutes: 90
     steps:
       - name: Checkout code
@@ -246,7 +246,7 @@ jobs:
       - name: Build Ghostty.app
         run: |
           cd macos
-          sudo xcode-select -s /Applications/Xcode_16.0.app
+          sudo xcode-select -s /Applications/Xcode_16.app
           xcodebuild -target Ghostty -configuration Release
 
       # We inject the "build number" as simply the number of commits since HEAD.
