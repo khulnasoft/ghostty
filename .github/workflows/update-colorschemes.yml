@@ -7,7 +7,7 @@ on:
 jobs:
   update-iterm2-schemes:
     if: github.repository == 'ghostty-org/ghostty'
-    runs-on: namespace-profile-ghostty-sm
+    runs-on: ghcr.io/khulnasoft/ubuntu-runner-amd64:22.04-sm
     permissions:
       # Needed for create-pull-request action
       contents: write
@@ -48,14 +48,14 @@ jobs:
         run: |
           # Only proceed if build.zig.zon has changed
           if ! git diff --exit-code build.zig.zon; then
-            nix develop -c ./nix/build-support/check-zig-cache.sh --update
-            nix develop -c ./nix/build-support/check-zig-cache.sh
+            nix develop -c ./nix/build-support/check-zig-cache-hash.sh --update
+            nix develop -c ./nix/build-support/check-zig-cache-hash.sh
           fi
 
       # Verify the build still works. We choose an arbitrary build type
       # as a canary instead of testing all build types.
       - name: Test Build
-        run: nix build .#ghostty
+        run: nix develop -c zig build -Dapp-runtime=gtk -Dgtk-adwaita=true
 
       - name: Create pull request
         uses: peter-evans/create-pull-request@v7
@@ -66,9 +66,7 @@ jobs:
           commit-message: "deps: Update iTerm2 color schemes"
           add-paths: |
             build.zig.zon
-            build.zig.zon.nix
-            build.zig.zon.txt
-            build.zig.zon.json
+            nix/zigCacheHash.nix
           body: |
             Upstream revision: https://github.com/mbadolato/iTerm2-Color-Schemes/tree/${{ steps.zig_fetch.outputs.upstream_rev }}
           labels: dependencies
