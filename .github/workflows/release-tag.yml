@@ -7,7 +7,6 @@ on:
       upload:
         description: "Upload final artifacts to R2"
         default: false
-
   push:
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+"
@@ -22,7 +21,7 @@ concurrency:
 
 jobs:
   setup:
-    runs-on: namespace-profile-ghostty-sm
+    runs-on: ghcr.io/khulnasoft/ubuntu-runner-amd64:22.04-sm
     outputs:
       version: ${{ steps.extract_version.outputs.version }}
       build: ${{ steps.extract_build_info.outputs.build }}
@@ -73,21 +72,12 @@ jobs:
           cat $GITHUB_OUTPUT
 
   source-tarball:
-    runs-on: namespace-profile-ghostty-md
+    runs-on: ghcr.io/khulnasoft/ubuntu-runner-amd64:22.04-md
     needs: [setup]
     env:
       GHOSTTY_VERSION: ${{ needs.setup.outputs.version }}
-      ZIG_LOCAL_CACHE_DIR: /zig/local-cache
-      ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@v1.2.0
-        with:
-          path: |
-            /nix
-            /zig
 
       - uses: cachix/install-nix-action@v30
         with:
@@ -100,8 +90,8 @@ jobs:
 
       - name: Create Tarball
         run: |
-          nix develop -c zig build distcheck
-          cp zig-out/dist/ghostty-${GHOSTTY_VERSION}.tar.gz .
+          git archive --format=tgz --prefix="ghostty-${GHOSTTY_VERSION}/" -o "ghostty-${GHOSTTY_VERSION}.tar.gz" HEAD
+          git archive --format=tgz --prefix=ghostty-source/ -o ghostty-source.tar.gz HEAD
 
       - name: Sign Tarball
         run: |
@@ -117,10 +107,12 @@ jobs:
           path: |-
             ghostty-${{ env.GHOSTTY_VERSION }}.tar.gz
             ghostty-${{ env.GHOSTTY_VERSION }}.tar.gz.minisig
+            ghostty-source.tar.gz
+            ghostty-source.tar.gz.minisig
 
   build-macos:
     needs: [setup]
-    runs-on: namespace-profile-ghostty-macos
+    runs-on: ghcr.io/khulnasoft/macos-runner:sonoma
     timeout-minutes: 90
     env:
       GHOSTTY_VERSION: ${{ needs.setup.outputs.version }}
@@ -139,11 +131,11 @@ jobs:
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
 
       - name: XCode Select
-        run: sudo xcode-select -s /Applications/Xcode_16.0.app
+        run: sudo xcode-select -s /Applications/Xcode_16.app
 
       - name: Setup Sparkle
         env:
-          SPARKLE_VERSION: 2.6.4
+          SPARKLE_VERSION: 2.6.3
         run: |
           mkdir -p .action/sparkle
           cd .action/sparkle
@@ -268,7 +260,7 @@ jobs:
             ghostty-macos-universal-dsym.zip
 
   sentry-dsym:
-    runs-on: namespace-profile-ghostty-sm
+    runs-on: ghcr.io/khulnasoft/ubuntu-runner-amd64:22.04-sm
     needs: [build-macos]
     steps:
       - name: Install sentry-cli
@@ -288,7 +280,7 @@ jobs:
 
   appcast:
     needs: [setup, build-macos]
-    runs-on: namespace-profile-ghostty-macos
+    runs-on: ghcr.io/khulnasoft/macos-runner:sonoma
     env:
       GHOSTTY_VERSION: ${{ needs.setup.outputs.version }}
       GHOSTTY_BUILD: ${{ needs.setup.outputs.build }}
@@ -305,7 +297,7 @@ jobs:
 
       - name: Setup Sparkle
         env:
-          SPARKLE_VERSION: 2.6.4
+          SPARKLE_VERSION: 2.6.3
         run: |
           mkdir -p .action/sparkle
           cd .action/sparkle
@@ -342,7 +334,7 @@ jobs:
         github.event.inputs.upload == 'true') ||
       github.event_name == 'push'
     needs: [setup, source-tarball, build-macos, appcast]
-    runs-on: namespace-profile-ghostty-sm
+    runs-on: ghcr.io/khulnasoft/ubuntu-runner-amd64:22.04-sm
     env:
       GHOSTTY_VERSION: ${{ needs.setup.outputs.version }}
     steps:
@@ -375,8 +367,22 @@ jobs:
           mv ghostty-macos-universal.zip blob/${GHOSTTY_VERSION}/ghostty-macos-universal.zip
           mv ghostty-macos-universal-dsym.zip blob/${GHOSTTY_VERSION}/ghostty-macos-universal-dsym.zip
           mv Ghostty.dmg blob/${GHOSTTY_VERSION}/Ghostty.dmg
-          mv appcast.xml blob/${GHOSTTY_VERSION}/appcast-staged.xml
       - name: Upload to R2
+        uses: ryand56/r2-upload-action@latest
+        with:
+          r2-account-id: ${{ secrets.CF_R2_RELEASE_ACCOUNT_ID }}
+          r2-access-key-id: ${{ secrets.CF_R2_RELEASE_AWS_KEY }}
+          r2-secret-access-key: ${{ secrets.CF_R2_RELEASE_SECRET_KEY }}
+          r2-bucket: ghostty-release
+          source-dir: blob
+          destination-dir: ./
+
+      - name: Prep Appcast
+        run: |
+          rm -rf blob
+          mkdir blob
+          mv appcast.xml blob/appcast.xml
+      - name: Upload Appcast to R2
         uses: ryand56/r2-upload-action@latest
         with:
           r2-account-id: ${{ secrets.CF_R2_RELEASE_ACCOUNT_ID }}
